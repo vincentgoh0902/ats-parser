@@ -1,4 +1,4 @@
-"""python -m app.cli resume.pdf [--json] [--check-links] [--engine legacy|modern]"""
+"""python -m app.cli resume.pdf [--jd job.txt] [--json] [--check-links] [--engine legacy|modern]"""
 
 import argparse
 import asyncio
@@ -7,6 +7,7 @@ import sys
 
 from app import report
 from app.guard import RejectedUpload
+from app.match import matcher
 
 
 def _print(r: dict, engine: str) -> None:
@@ -45,12 +46,32 @@ def _print(r: dict, engine: str) -> None:
         print("  none")
 
 
+def _print_match(m: dict) -> None:
+    print(f"\n=== Job match: {m['score']}/100 ({m['band_label']}) ===")
+    for b in m["breakdown"]:
+        print(f"  {b['label']:20} {b['score']:>4.0%}  (weight {b['weight']}%)  {b['detail']}")
+    for imp in ("required", "responsibility", "preferred"):
+        ts = [t for t in m["terms"] if t["importance"] == imp]
+        if not ts:
+            continue
+        print(f"\n  {imp}:")
+        for t in ts:
+            mark = {"matched": "✓", "partial": "~", "missing": "✗"}[t["status"]]
+            where = f"  [{', '.join(t['where'])}]" if t["where"] else ""
+            label = t["label"] if t["label"] == t["term"] else f"{t['label']} → {t['term']}"
+            print(f"    {mark} {label} ({t['kind']}, w={t['weight']}){where}")
+    print("\n  Suggestions:")
+    for s in m["suggestions"]:
+        print(f"    - {s['text']}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="See what an ATS parses from a resume PDF.")
     ap.add_argument("pdf")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--check-links", action="store_true")
     ap.add_argument("--engine", choices=("modern", "legacy"), default="modern")
+    ap.add_argument("--jd", help="text file with a job description to match against")
     args = ap.parse_args()
     with open(args.pdf, "rb") as f:
         data = f.read()
@@ -61,10 +82,15 @@ def main() -> int:
         return 1
     if args.check_links:
         r = asyncio.run(report.add_liveness(r))
+    if args.jd:
+        with open(args.jd, encoding="utf-8") as f:
+            r["match"] = matcher.match(f.read(), r)
     if args.json:
         print(json.dumps(r, indent=2, ensure_ascii=False))
     else:
         _print(r, args.engine)
+        if args.jd:
+            _print_match(r["match"])
     return 0
 
 

@@ -14,25 +14,46 @@
   <div>
     <p class="eyebrow">a closer look at your resume</p>
     <h1>ATS <em>Parser</em></h1>
-    <p class="sub">See what an applicant tracking system actually reads from your resume.</p>
+    <p class="sub">See what an applicant tracking system actually reads from your resume, and how well it fits a job.</p>
   </div>
   <label class="toggle"><input type="checkbox" id="check-links"> Check that links load</label>
 </header>
 
 <main>
-  <section id="drop" class="drop" tabindex="0">
-    <input type="file" id="file" accept="application/pdf,.pdf" hidden>
-    <p class="drop-title">Drop your resume PDF here</p>
-    <p class="drop-hint">or <button type="button" id="pick" class="linkish">choose a file</button>. Max 5 MB, 10 pages.
-      It's processed in memory and thrown away.</p>
+  <section class="inputs">
+    <div class="jd-box">
+      <label for="jd" class="input-label">Job description <span class="muted">(optional)</span></label>
+      <textarea id="jd" maxlength="20000" placeholder="Paste the job ad here to see how well your resume matches it."></textarea>
+      <div class="jd-foot">
+        <span id="jd-count" class="muted"></span>
+        <button type="button" id="rerun" class="btn" hidden>Match again</button>
+      </div>
+    </div>
+    <section id="drop" class="drop" tabindex="0">
+      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <p class="drop-title">Drop your resume PDF here</p>
+      <p class="drop-hint">or <button type="button" id="pick" class="linkish">choose a file</button>. Max 5 MB, 10 pages.
+        It's processed in memory and thrown away.</p>
+    </section>
   </section>
 
   <p id="status" class="status" role="status"></p>
 
   <section id="result" class="result" hidden>
     <div class="pane pdf-pane">
-      <div class="pane-head"><h2>Your PDF</h2><span id="filename" class="muted"></span></div>
+      <div class="pane-head">
+        <h2 id="left-title">Your PDF</h2>
+        <div class="seg" id="left-view" hidden>
+          <button data-left="pdf" class="on">PDF</button>
+          <button data-left="marks">Highlighted</button>
+        </div>
+        <span id="filename" class="muted"></span>
+      </div>
       <iframe id="preview" title="Your resume"></iframe>
+      <div id="resume-doc-wrap" hidden>
+        <p class="legend muted">The Smart parser's reading of your resume. Click a highlight to find it in the job ad.</p>
+        <div id="resume-doc" class="doc"></div>
+      </div>
     </div>
 
     <div class="pane">
@@ -41,6 +62,7 @@
         <div id="score" class="score"></div>
       </div>
       <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="match" hidden>Job match</button>
         <button role="tab" data-tab="issues" aria-selected="true">Issues</button>
         <button role="tab" data-tab="fields">Parsed fields</button>
         <button role="tab" data-tab="text">Raw text</button>
@@ -56,6 +78,7 @@
         </div>
       </div>
 
+      <div id="tab-match" class="tab" hidden></div>
       <div id="tab-issues" class="tab"></div>
       <div id="tab-fields" class="tab" hidden></div>
       <div id="tab-text" class="tab" hidden></div>

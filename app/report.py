@@ -58,7 +58,7 @@ def parse_fields(text: str) -> tuple[dict, list[dict]]:
         "education": education,
         "projects": projects if projects else by_key.get("projects", []),
         "skills": skills.from_section(skill_lines),
-        "skills_detected": skills.detect(text, "\n".join(skill_lines)),
+        "skills_detected": skills.detect(text),
         "other_sections": {k: v for k, v in by_key.items()
                            if k not in ("top", "summary", "experience", "education",
                                         "projects", "skills")},
