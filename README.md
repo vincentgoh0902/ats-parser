@@ -15,6 +15,13 @@ Parsing is deterministic and rule-based, with no LLM, so it fails where real ATS
 parsers fail instead of quietly fixing things. Uploads are processed in memory and
 never stored.
 
+![A two-column resume next to the issues the parser found: a multi-column layout and no name at the top, each with a fix](docs/screenshot-issues.png)
+
+The same resume read the way a simpler ATS reads it, straight across the page. The
+sidebar's contact details and skills end up mixed into the job bullets:
+
+![Raw text view in Simple mode, with the lines that differ from the column-aware reading highlighted](docs/screenshot-raw-text.png)
+
 ## Run locally
 
 ```bash
