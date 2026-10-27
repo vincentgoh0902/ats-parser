@@ -14,7 +14,7 @@ something, this tool has to garble it the same way and explain why.
 
 Phases 1–4 done and 6 partly done: CLI, field parser, link auditor, web UI, Dockerfile
 (arm64 image builds and runs at ~45 MB RAM), plus the job description matcher.
-43 tests pass. Next: phase 5,
+48 tests pass. Next: phase 5,
 calibrating against real ATSs with my real resume. Not yet added to the homelab.
 
 Run locally:
@@ -180,6 +180,18 @@ JD text ─▶ jd.py: lines tagged required / preferred / responsibilities / ign
         ─▶ suggestions + character spans in both texts for the UI
 ```
 
+- Sections: headings glued onto the next sentence by job-board copy/paste ("The RoleWe are…")
+  are split off. "About <Company>" is ignored and the company name is never a phrase.
+  "This role is not for…" sections are `exclude` (never counted). Location, language and
+  interview-process sections are ignored. Text before the first heading is `intro`
+  (skills count at responsibility weight, no phrases).
+- Taxonomy aliases starting with `~` only count on a line that also mentions AI
+  ("evaluations" next to "LLMs", not "performance evaluations"). Bare "security" is not
+  a skill; only qualified forms ("information security", "AppSec") are.
+- RAKE phrases drop possessives ("BJAK's"), negated runs ("not just AI strategy") and
+  generic words ("real", "similar", "problems").
+- Each tricky real job ad becomes a regression sample in `tests/jd/` with a test that
+  pins its headings and its good/bad keywords (`bjak_ai_engineer.txt` is the first).
 - A skill nested in a longer one in the job ad ("GitHub" in "GitHub Actions") is dropped.
 - Term weight: required 1.0, responsibilities 0.8, ×1.2/×1.4 if repeated, soft
   skills and RAKE phrases ×0.4.

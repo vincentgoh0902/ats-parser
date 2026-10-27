@@ -90,3 +90,41 @@ def test_experience_months_merges_overlaps():
     jobs = [{"start": "2020-01", "end": "2020-12"}, {"start": "2020-06", "end": "2021-06"},
             {"start": "2019", "end": "2019"}]
     assert matcher._experience_months(jobs) == 12 + 6 + 12
+
+
+def test_glued_headings_and_not_for_section():
+    # Copied from LinkedIn: headings run into the next sentence ("The RoleWe are...").
+    parsed = jd.parse((HERE / "jd" / "bjak_ai_engineer.txt").read_text())
+    kinds = {line.strip(): k for _, _, k, line in parsed["lines"]}
+    assert parsed["company"] == "BJAK"
+    for heading in ("About BJAK", "The Role", "What You Will Build", "What We Look For",
+                    "This Role Is Not For", "The Bar", "Location", "Language", "Interview Process"):
+        assert kinds[heading] == "heading"
+    assert kinds["People who only want research projects with no production ownership."] == "exclude"
+    language = next(k for line, k in kinds.items() if line.startswith("English is our main"))
+    assert language == "ignore"
+    fintech = next(k for line, k in kinds.items() if line.startswith("Fintech, banking"))
+    assert fintech == "preferred"  # "is a strong plus"
+
+
+def test_ai_engineer_job_terms(resume):
+    t = terms(run(resume, "bjak_ai_engineer"))
+    for skill in ("AI Agents", "Tool Calling", "LLM Evaluation", "Guardrails", "KYC", "CRM",
+                  "Retrieval-Augmented Generation", "Workflow Automation", "Python", "TypeScript"):
+        assert skill in t, skill
+    # Company blurb, "not for" list, logistics and bare constraint words aren't keywords.
+    labels = " | ".join(t).lower()
+    for bad in ("believe people", "research projects", "ownership", "communication", "cybersecurity",
+                "s ai neobank", "bjak", "ai strategy", "real technology", "similar practical",
+                "turn manual", "around real"):
+        assert bad not in labels, bad
+    assert t["Fintech"]["importance"] == "preferred"
+
+
+@pytest.mark.parametrize("text,hits", [
+    ("Built evaluations for our LLM agents", ["evaluations"]),
+    ("Ran quarterly performance evaluations", []),
+    ("Wrote LLM evals", ["LLM evals"]),
+])
+def test_context_only_aliases(text, hits):
+    assert [m.group(0) for m in BY_NAME["LLM Evaluation"].finditer(text)] == hits

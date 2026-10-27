@@ -1,0 +1,35 @@
+About the job
+About BJAKThe original mission of BJAK is we believe people deserve smarter ways to plan, save and grow their money. This is the origin of our name.
+Started in 2019, we built the first mobile-first, insurance platform, enabling insurance to be accessible online by millions in the region. Today, its the leading insurance platform in Southeast Asia.
+Today, we are expanding ways to help people in the region — this includes spending, saving, investing, exchanging, travelling, and more. Our mission is help people get more from their money every day.
+We have teams working around the world, with over 20 nationalities from our offices and remotely, who truly enjoys their work. We are looking for the most talented and driven people we can find. We are looking for people who work for their passion, not counting hours. Who loves building great next-generation products, not status quo. Who cares about redefining how everyone around us can get the best financial applications, not for an exclusive few.
+If you're this person, we'd love to talk to you. 
+The RoleWe are looking for applied AI engineers to build AI-native systems for BJAK's AI Neobank app.
+This is not a research-only role. We need builders who can use AI to automate real workflows, improve products, reduce manual work and make financial services easier for users and teams. 
+What You Will Build
+Build AI agents, workflows, tools and automations that solve real customer, product and operations problems.
+Apply LLMs, retrieval, tool calling, evaluations, guardrails and automation to practical financial workflows.
+Create AI-assisted experiences for onboarding, support, KYC, risk review, CRM, operations, document handling and product intelligence.
+Work with product and engineering teams to identify what is worth building, then build it quickly and improve it in production.
+Design around real constraints: accuracy, hallucination risk, latency, cost, security, compliance and user trust.
+Turn manual processes into reliable AI-enabled systems that can scale.
+
+What We Look For
+Hands-on engineering ability, not just AI strategy or management experience.
+Experience building AI agents, LLM apps, RAG systems, automation workflows, copilots or AI-enabled tools.
+Strong coding ability in Python, TypeScript, JavaScript or similar practical stack.
+Good judgement on what should be automated and what should not.
+Able to ship working systems, test quality and improve reliability over time.
+Fintech, banking, support automation, risk, KYC, fraud, CRM or operations automation experience is a strong plus.
+ 
+This Role Is Not For
+People who only want research projects with no production ownership.
+Candidates who treat AI as demos instead of working systems.
+Engineers who do not care about evaluation, reliability or user impact.
+People who overclaim AI impact without evidence.
+Builders who cannot work with product, ops and business teams.
+ 
+The BarWe are looking for engineers with real technology career highlights. A strong highlight is not just working at a famous company. A strong highlight means you personally helped build, ship or scale a serious product, platform or system.
+LocationThis role is remote, but candidates must be based in Singapore. We are hiring specifically for this market, so applicants should already be based in Singapore. 
+LanguageEnglish is our main working language across global teams. Strong English communication is required. 
+Interview ProcessOur process is designed to move fast:1. Online assessment or practical task2. Technical interview3. CEO / final roundFor strong candidates, we aim to complete the process and make an offer within 1 week from the start of the interview process. Candidates who complete assessments quickly will be prioritized.

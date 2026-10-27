@@ -28,6 +28,8 @@ TITLE_LEMMA = {"scientist": "science", "engineer": "engineering", "analyst": "an
                "programmer": "development", "researcher": "research", "designer": "design",
                "ml": "machine", "ai": "artificial"}
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#]*")
+# Job ad lines whose keywords never count: perks, company blurb, "this role is not for".
+SKIP_KINDS = {"ignore", "exclude", "heading"}
 
 
 # ---------------------------------------------------------------- helpers
@@ -126,7 +128,7 @@ def _fields_in(text: str) -> list[str]:
 
 def _jd_skill_terms(jd: dict) -> list[dict]:
     text = jd["text"]
-    usable = [(s, e, k) for s, e, k, _ in jd["lines"] if k not in ("ignore", "heading")]
+    usable = [(s, e, k) for s, e, k, _ in jd["lines"] if k not in SKIP_KINDS]
     terms = []
     for skill in SKILLS:
         occurrences = []
@@ -146,7 +148,7 @@ def _jd_skill_terms(jd: dict) -> list[dict]:
 def _importance(kinds: set[str]) -> str:
     if kinds & {"required", "general"}:
         return "required"
-    if "responsibilities" in kinds:
+    if kinds & {"responsibilities", "intro"}:
         return "responsibility"
     return "preferred"
 
@@ -246,13 +248,15 @@ def match(jd_text: str, report: dict) -> dict:
     def on_scored_line(s, e):
         return any(a < e and s < b for a, b in scored_lines)
 
+    # Phrases skip the intro too: before the first heading is usually the company pitch.
     usable = [(s, e, k) for s, e, k, _ in jd["lines"]
-              if k not in ("ignore", "heading") and not on_scored_line(s, e)]
+              if k not in SKIP_KINDS | {"intro"} and not on_scored_line(s, e)]
     jd_skill_spans = [tuple(sp) for t in terms for sp in t["jd_spans"]]
     phrase_text = "\n".join(jd["text"][s:e] for s, e, _ in usable)
-    for p in phrases.extract(phrase_text, limit=25):
+    company_words = set(jd["company"].split()) if jd["company"] else set()
+    for p in phrases.extract(phrase_text, limit=25, extra_stop=company_words):
         spans, kinds = [], set()
-        pattern = re.compile(r"(?<!\w)" + r"[\s\-]+".join(map(re.escape, p["phrase"].split())) + r"(?!\w)", re.I)
+        pattern = re.compile(r"(?<!\w)" + r"(?:['’]s)?[\s\-]+".join(map(re.escape, p["phrase"].split())) + r"(?!\w)", re.I)
         for s, e, kind in usable:
             for mm in pattern.finditer(jd["text"], s, e):
                 spans.append([mm.start(), mm.end()])

@@ -13,21 +13,40 @@ HEADINGS = {
                  "must haves", "what we re looking for", "what we are looking for", "about you",
                  "you have", "you ll have", "who you are", "skills", "required skills",
                  "key requirements", "requirements and qualifications", "your profile",
-                 "skills and experience", "experience", "job requirements", "the ideal candidate"],
+                 "skills and experience", "experience", "job requirements", "the ideal candidate",
+                 "what we look for", "what we re looking for in you", "the bar", "what you bring",
+                 "what it takes", "you bring", "your background"],
     "preferred": ["preferred qualifications", "preferred", "nice to have", "nice to haves",
                   "bonus", "bonus points", "good to have", "desired", "desirable",
                   "preferred skills", "pluses", "extra credit", "it s a plus if"],
     "responsibilities": ["responsibilities", "what you ll do", "what you will do", "the role",
                          "your role", "key responsibilities", "job description", "duties",
                          "day to day", "in this role you will", "role overview", "about the role",
-                         "what you ll be doing", "your responsibilities", "the job"],
+                         "what you ll be doing", "your responsibilities", "the job", "what you will build",
+                         "what you ll build", "what you will work on", "what you ll work on",
+                         "the opportunity", "your mission"],
     "ignore": ["about us", "about the company", "who we are", "benefits", "perks",
                "what we offer", "compensation", "salary", "why join us", "our values",
                "equal opportunity", "eeo", "diversity", "how to apply", "location",
-               "perks and benefits", "life at", "our culture"],
+               "perks and benefits", "life at", "our culture", "work location", "language", "languages",
+               "interview process", "hiring process", "our hiring process", "application process",
+               "next steps", "how we hire", "our mission", "the company", "company overview"],
+    # Who the company does NOT want. Nothing here is a keyword to add.
+    "exclude": ["this role is not for", "this role isn t for", "who this role is not for",
+                "this is not for you if", "this job is not for", "not a fit if", "you won t enjoy this if",
+                "who should not apply", "this isn t for you if", "red flags"],
+    # LinkedIn's wrapper heading: changes nothing.
+    "general": ["about the job"],
 }
 _ALIASES = {a: k for k, aliases in HEADINGS.items() for a in aliases}
-PREFERRED_CUE = re.compile(r"\b(?:preferred|nice to have|a plus|is a plus|bonus|ideally|desirable|good to have)\b", re.I)
+ABOUT_COMPANY = re.compile(r"^about\s+(?!the\s+(?:role|job|team|position)\b|you\b|this\b|\d)"
+                           r"[\w&.'’-]+(?:\s[\w&.'’-]+){0,3}:?$", re.I)
+NOT_FOR = re.compile(r"\b(?:not for|not a fit|isn t for|should not apply|won t enjoy)\b")
+# A heading glued onto the next sentence when copied from a job board: "The RoleWe are...".
+GLUED = re.compile(r"(?<=[A-Za-z])(?=[A-Z][a-z])")
+
+PREFERRED_CUE = re.compile(r"\b(?:preferred|nice to have|an? (?:strong |big |huge |definite )?plus|bonus|ideally|"
+                           r"desirable|good to have)\b", re.I)
 REQUIRED_CUE = re.compile(r"\b(?:required|must|mandatory|essential)\b", re.I)
 
 YEARS_RE = re.compile(
@@ -61,6 +80,11 @@ def heading_kind(line: str) -> str | None:
     norm = _norm_heading(s)
     if norm in _ALIASES:
         return _ALIASES[norm]
+    # "About BJAK", "About Acme Corp": the company blurb.
+    if ABOUT_COMPANY.match(s):
+        return "ignore"
+    if NOT_FOR.search(norm):
+        return "exclude"
     # "Requirements:" or "Preferred Qualifications (nice to have)"
     if s.endswith(":") or len(s.split()) <= 5:
         for alias, kind in _ALIASES.items():
@@ -69,23 +93,44 @@ def heading_kind(line: str) -> str | None:
     return None
 
 
+def split_glued_headings(text: str) -> str:
+    """Put a line break between a heading and the sentence glued onto it
+    ("LocationThis role is remote"). Only when the part before is a known
+    heading, so "TypeScript" or "JavaScript" are never split."""
+    out = []
+    for line in text.split("\n"):
+        for m in GLUED.finditer(line[:45]):
+            head = line[:m.start()]
+            if heading_kind(head) and not re.search(r"[.:;!?]", head):
+                line = head + "\n" + line[m.start():]
+                break
+        out.append(line)
+    return "\n".join(out)
+
+
 def lines_with_kind(text: str) -> list[tuple[int, int, str, str]]:
     """Every line as (start, end, kind, line text). Kind comes from the heading
-    above it, overridden by cues on the line itself ("... is a plus")."""
+    above it, overridden by cues on the line itself ("... is a plus").
+    Lines before the first heading are "intro" once the ad has headings: often
+    a company pitch, so they only count for known skills, at a lower weight."""
     out, current, pos = [], "general", 0
+    has_headings = any(heading_kind(raw) not in (None, "general") for raw in text.split("\n"))
+    if has_headings:
+        current = "intro"
     for raw in text.split("\n"):
         start, end = pos, pos + len(raw)
         pos = end + 1
         kind = heading_kind(raw)
         if kind:
-            current = kind
+            if kind != "general":
+                current = kind
             out.append((start, end, "heading", raw))
             continue
         line_kind = current
-        if current != "ignore":
+        if current not in ("ignore", "exclude"):
             if PREFERRED_CUE.search(raw):
                 line_kind = "preferred"
-            elif REQUIRED_CUE.search(raw) and current == "general":
+            elif REQUIRED_CUE.search(raw) and current in ("general", "intro"):
                 line_kind = "required"
         out.append((start, end, line_kind, raw))
     return out
@@ -105,7 +150,7 @@ def years_required(lines) -> dict | None:
     preferred ones; a 'preferred' 5 years doesn't override a required 2."""
     candidates = []
     for start, end, kind, line in lines:
-        if kind in ("ignore", "heading"):
+        if kind in ("ignore", "exclude", "heading"):
             continue
         for m in YEARS_RE.finditer(line):
             n = int(m.group("n"))
@@ -122,7 +167,7 @@ def degree_required(lines) -> dict | None:
     """Lowest degree level mentioned ('Bachelor's or Master's' means Bachelor's)."""
     found = None
     for start, end, kind, line in lines:
-        if kind in ("ignore", "heading"):
+        if kind in ("ignore", "exclude", "heading"):
             continue
         low = line.lower()
         levels = [(lvl, label) for lvl, label, pattern in DEGREE_LEVELS if re.search(pattern, low)]
@@ -140,8 +185,17 @@ def degree_required(lines) -> dict | None:
     return found
 
 
+def detect_company(lines) -> str | None:
+    """The name in an "About Acme" heading, so it isn't reported as a keyword."""
+    for _, _, kind, line in lines:
+        m = ABOUT_COMPANY.match(line.strip())
+        if kind == "heading" and m:
+            return line.strip()[6:].strip(" :")
+    return None
+
+
 def parse(text: str) -> dict:
-    text = text.replace("\r\n", "\n").replace("\r", "\n")[:MAX_JD_CHARS]
+    text = split_glued_headings(text.replace("\r\n", "\n").replace("\r", "\n")[:MAX_JD_CHARS])
     lines = lines_with_kind(text)
     return {
         "text": text,
@@ -149,4 +203,5 @@ def parse(text: str) -> dict:
         "title": detect_title(text),
         "years": years_required(lines),
         "degree": degree_required(lines),
+        "company": detect_company(lines),
     }

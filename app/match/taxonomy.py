@@ -2,7 +2,8 @@
 
 Format per entry: "Canonical|alias|alias". A leading "=" makes the whole entry
 case-sensitive, for names that are also everyday words ("Go", "R", "Excel",
-"Spring"). Matching also accepts space/hyphen variants and simple plurals, so
+"Spring"). An alias starting with "~" only counts on a line that also talks
+about AI ("evaluations" next to "LLMs", not "performance evaluations"). Matching also accepts space/hyphen variants and simple plurals, so
 "scikit learn" and "APIs" need no alias of their own.
 """
 
@@ -77,8 +78,30 @@ _RAW = {
         Computer Vision|CV
         Large Language Models|LLM|LLMs
         Generative AI|GenAI|Gen AI
-        Retrieval-Augmented Generation|RAG
-        Prompt Engineering
+        Retrieval-Augmented Generation|RAG|~retrieval
+        Prompt Engineering|prompt design|prompting|prompt tuning
+        AI Agents|AI agent|LLM agents|agentic|agentic workflows|autonomous agents|multi-agent
+        Tool Calling|function calling|tool use
+        LLM Evaluation|LLM evals|evals|eval harness|~evaluation|~evaluations
+        Guardrails|AI guardrails|LLM guardrails
+        Hallucination Mitigation|hallucination|hallucinations
+        AI Copilots|copilot|copilots|AI assistant|AI assistants
+        Fine-tuning|fine tuning|finetuning|LoRA|PEFT
+        Semantic Search|vector search
+        Model Context Protocol|=MCP
+        OpenAI API|OpenAI
+        Anthropic API|Claude API|Anthropic
+        LangGraph
+        CrewAI
+        AutoGen
+        Pinecone
+        pgvector
+        FAISS
+        Chroma|ChromaDB
+        Weaviate
+        Qdrant
+        Document Processing|document handling|document understanding|intelligent document processing|IDP
+        OCR|optical character recognition
         Reinforcement Learning|RL
         PyTorch|Torch
         PyTorch Geometric|PyG
@@ -110,9 +133,31 @@ _RAW = {
         Classification
         Clustering
         Anomaly Detection|outlier detection
-        Fraud Detection
+        Fraud Detection|fraud prevention|anti-fraud
         Embeddings|vector embeddings
         Vector Database|vector DB|vector store
+    """,
+    "automation": """
+        Workflow Automation|automation workflows|automated workflows|process automation|business process automation|automate workflows
+        Support Automation|customer support automation
+        Operations Automation|ops automation
+        Robotic Process Automation|RPA
+        n8n
+        Zapier
+        UiPath
+    """,
+    "domain": """
+        Fintech|financial technology
+        Banking|digital banking|neobank
+        Payments|payment systems|payment processing
+        Insurance|insurtech
+        KYC|know your customer|eKYC
+        AML|anti-money laundering|anti money laundering
+        =CRM|customer relationship management
+        Salesforce
+        Risk Management|risk review|risk assessment|risk modelling|risk modeling|credit risk
+        Regulatory Compliance|compliance requirements|regulatory requirements
+        Onboarding|customer onboarding|user onboarding
     """,
     "data": """
         Pandas
@@ -221,7 +266,7 @@ _RAW = {
         Algorithms
         Object-Oriented Programming|OOP|object oriented
         Code Review|code reviews
-        Security|cybersecurity
+        Cybersecurity|cyber security|information security|InfoSec|application security|AppSec|network security|cloud security|security engineering|secure coding
         Product Analytics
         SQL Optimization|query optimization
     """,
@@ -242,18 +287,48 @@ _RAW = {
 }
 
 
+AI_CONTEXT = re.compile(r"\b(?:LLMs?|AI|GenAI|GPT|agents?|agentic|RAG|prompts?|chatbots?|copilots?|"
+                        r"models?|machine learning|ML|NLP|guardrails)\b")
+
+
 class Skill:
-    __slots__ = ("name", "aliases", "category", "pattern")
+    __slots__ = ("name", "aliases", "category", "pattern", "context_pattern")
 
     def __init__(self, name, aliases, category, case_sensitive):
-        self.name, self.aliases, self.category = name, aliases, category
-        self.pattern = re.compile(
-            "|".join(_alias_regex(a, case_sensitive) for a in sorted([name, *aliases], key=len, reverse=True)),
-            0 if case_sensitive else re.I,
-        )
+        self.name, self.category = name, category
+        plain = [a for a in [name, *aliases] if not a.startswith("~")]
+        context = [a[1:] for a in aliases if a.startswith("~")]
+        self.aliases = [a for a in plain if a != name] + context
+        flags = 0 if case_sensitive else re.I
+        self.pattern = _compile(plain, case_sensitive, flags)
+        self.context_pattern = _compile(context, case_sensitive, flags) if context else None
 
     def finditer(self, text):
-        return self.pattern.finditer(text)
+        """Matches of the plain aliases, plus "~" aliases on lines that talk about AI."""
+        hits = list(self.pattern.finditer(text))
+        if self.context_pattern:
+            for m in self.context_pattern.finditer(text):
+                start = text.rfind("\n", 0, m.start()) + 1
+                end = text.find("\n", m.end())
+                line = text[start:] if end < 0 else text[start:end]
+                if AI_CONTEXT.search(line) and not any(h.start() <= m.start() < h.end() for h in hits):
+                    hits.append(m)
+            hits.sort(key=lambda m: m.start())
+        return iter(hits)
+
+    def search(self, text):
+        return next(self.finditer(text), None)
+
+
+def _compile(aliases, case_sensitive, flags):
+    # "=MCP" inside an otherwise case-insensitive entry is matched case-sensitively.
+    parts = []
+    for a in sorted(aliases, key=lambda a: len(a.lstrip("=")), reverse=True):
+        if a.startswith("="):
+            parts.append("(?-i:" + _alias_regex(a[1:], True) + ")")
+        else:
+            parts.append(_alias_regex(a, case_sensitive))
+    return re.compile("|".join(parts), flags)
 
 
 def _alias_regex(alias: str, case_sensitive: bool) -> str:

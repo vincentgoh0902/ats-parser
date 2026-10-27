@@ -200,3 +200,4 @@ button.chip { font: inherit; font-size: 14px; cursor: pointer; }
 .suggestions li[data-term]:hover { color: var(--heading); text-decoration: underline; text-decoration-color: var(--line); }
 .pdf-pane .seg { margin-left: auto; }
 .pdf-pane .pane-head { flex-wrap: wrap; }
+.doc .line.exclude { color: var(--muted); opacity: .6; text-decoration: line-through; }

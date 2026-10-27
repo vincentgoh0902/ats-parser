@@ -26,4 +26,4 @@ def from_section(lines: list[str]) -> list[str]:
 
 def detect(full_text: str) -> list[str]:
     """Technical skills (not soft skills) the taxonomy finds anywhere in the text."""
-    return [sk.name for sk in SKILLS if sk.category != "soft" and sk.pattern.search(full_text)]
+    return [sk.name for sk in SKILLS if sk.category != "soft" and sk.search(full_text)]

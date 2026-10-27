@@ -31,6 +31,12 @@ another analyse analyze analysing analyzing deploy deploying deliver delivering 
 collaborate partner partnering write writing create creating maintain maintaining improve
 improving scale scaling manage managing lead leading apply applying run running solve solving
 define defining identify understand communicate findings end results result impact fast-paced
+real similar practical serious famous smarter easier better best great people person someone
+everyone anyone believe deserve want need love loves cares care treat turn get gets give find
+talk start started expand expanding enable enabling reduce improve worth quickly every day today
+just only even really truly around without instead whether things thing something lot lots
+able willing passionate passion driven talented highly highlights highlight career careers
+problems problem issues challenges reliable robust rather avoid
 """.split())
 SPLIT_RE = re.compile(r"[.,;:!?()\[\]{}\"'“”‘’/|•*·\n]+|\s[-–—]\s|\s+&\s+")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]*[A-Za-z0-9+#]|[A-Za-z]")
@@ -46,25 +52,42 @@ def stem(word: str) -> str:
     return w
 
 
-def candidates(text: str) -> list[list[str]]:
+NEGATORS = {"not", "no", "never", "without", "instead", "rather", "avoid"}
+POSSESSIVE_RE = re.compile(r"(?<=\w)['’]s\b")
+
+
+def is_stop(tok: str, extra: set[str] = frozenset()) -> bool:
+    low = tok.lower()
+    return low in STOPWORDS or stem(low) in STOPWORDS or low in extra or tok.isdigit()
+
+
+def candidates(text: str, extra_stop: set[str] = frozenset()) -> list[list[str]]:
     out = []
+    # "BJAK's AI app" is one run, not "BJAK" and "s AI app".
+    text = POSSESSIVE_RE.sub("", text)
     for chunk in SPLIT_RE.split(text):
-        run = []
+        run, negated = [], False
         for tok in TOKEN_RE.findall(chunk):
-            if tok.lower() in STOPWORDS or tok.isdigit():
-                if run:
+            if is_stop(tok, extra_stop):
+                if run and not negated:
                     out.append(run)
+                if run:
+                    negated = False
                 run = []
+                # "not just AI strategy", "instead of demos": what follows isn't wanted.
+                if tok.lower() in NEGATORS:
+                    negated = True
             else:
                 run.append(tok)
-        if run:
+        if run and not negated:
             out.append(run)
     return [c for c in out if len(c) <= MAX_WORDS]
 
 
-def extract(text: str, limit: int = 10) -> list[dict]:
-    """Top phrases by RAKE score. The caller drops those overlapping known skills."""
-    cands = candidates(text)
+def extract(text: str, limit: int = 10, extra_stop: set[str] = frozenset()) -> list[dict]:
+    """Top phrases by RAKE score. The caller drops those overlapping known skills.
+    `extra_stop` holds words to split on as well, such as the company's name."""
+    cands = candidates(text, {w.lower() for w in extra_stop})
     freq, degree = Counter(), defaultdict(int)
     for c in cands:
         for w in c:
