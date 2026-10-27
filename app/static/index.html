@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATS Parser</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>ATS Parser</h1>
+    <p class="sub">See what an applicant tracking system actually reads from your resume.</p>
+  </div>
+  <label class="toggle"><input type="checkbox" id="check-links"> Check that links load</label>
+</header>
+
+<main>
+  <section id="drop" class="drop" tabindex="0">
+    <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+    <p class="drop-title">Drop your resume PDF here</p>
+    <p class="drop-hint">or <button type="button" id="pick" class="linkish">choose a file</button>. Max 5 MB, 10 pages.
+      It's processed in memory and thrown away.</p>
+  </section>
+
+  <p id="status" class="status" role="status"></p>
+
+  <section id="result" class="result" hidden>
+    <div class="pane pdf-pane">
+      <div class="pane-head"><h2>Your PDF</h2><span id="filename" class="muted"></span></div>
+      <iframe id="preview" title="Your resume"></iframe>
+    </div>
+
+    <div class="pane">
+      <div class="pane-head">
+        <h2>What the ATS sees</h2>
+        <div id="score" class="score"></div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="issues" aria-selected="true">Issues</button>
+        <button role="tab" data-tab="fields">Parsed fields</button>
+        <button role="tab" data-tab="text">Raw text</button>
+        <button role="tab" data-tab="links">Links</button>
+      </nav>
+
+      <div class="engine-bar">
+        <span class="muted">Parser:</span>
+        <div class="seg" id="engine">
+          <button data-engine="modern" class="on" title="Column-aware, like good commercial parsers">Smart</button>
+          <button data-engine="legacy" title="Reads straight across the page, like simpler ATSs">Simple</button>
+          <button data-engine="stream" title="Raw order stored in the PDF (Apache Tika-style)" data-text-only>Raw PDF order</button>
+        </div>
+      </div>
+
+      <div id="tab-issues" class="tab"></div>
+      <div id="tab-fields" class="tab" hidden></div>
+      <div id="tab-text" class="tab" hidden></div>
+      <div id="tab-links" class="tab" hidden></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot muted">
+  No tool reproduces every ATS exactly. If both the Smart and Simple parsers read your resume
+  cleanly, mainstream ATSs will too.
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

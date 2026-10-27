@@ -12,13 +12,30 @@ something, this tool has to garble it the same way and explain why.
 
 ## Status
 
-Planning. No code yet.
+Phases 1–4 done and 6 partly done: CLI, field parser, link auditor, web UI, Dockerfile
+(arm64 image builds and runs at ~45 MB RAM). 30 tests pass. Next: phase 5,
+calibrating against real ATSs with my real resume. Not yet added to the homelab.
+
+Run locally:
+
+```
+uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements-dev.txt
+.venv/bin/python -m app.cli resume.pdf [--engine legacy] [--check-links] [--json]
+PORT=8000 .venv/bin/python -m app.main          # UI at http://localhost:8000
+.venv/bin/python -m pytest -q
+.venv/bin/python tests/make_fixtures.py         # regenerate test PDFs
+```
 
 ## Stack
 
 - **Backend:** Python 3.12, FastAPI, uvicorn
-- **PDF engines:** `pdfminer.six` (via `pdfplumber`, MIT) and poppler `pdftotext`
-  (`poppler-utils` apt package, arm64 OK). No PyMuPDF, because AGPL.
+- **PDF engines:** `pdfminer.six` via `pdfplumber` (MIT), pure Python. All three
+  readings are built from pdfplumber's character/word positions. No PyMuPDF (AGPL).
+  Poppler `pdftotext` was tried and dropped: its block ordering moved right-aligned
+  dates onto their own lines and pushed the education date below Skills, which is
+  more pessimistic than real ATSs are on a plain single-column resume.
+- **Phones:** `phonenumberslite` (same API as `phonenumbers`, minus 35 MB of
+  carrier/geocoding data).
 - **Frontend:** one static HTML page with vanilla JS, served by FastAPI, no build step.
   The PDF preview uses the browser's built-in viewer (object URL), so nothing is
   rendered on the server.
@@ -70,15 +87,15 @@ Planning. No code yet.
 │     size + page cap, magic bytes "%PDF", reject encrypted, timeout         │
 │                     │                                                      │
 │                     ▼                                                      │
-│  2. Extraction engines (run in parallel, all in memory)                    │
-│   ┌────────────────────┐ ┌─────────────────────┐ ┌──────────────────────┐  │
-│   │ A. "Legacy ATS"    │ │ B. "Modern ATS"     │ │ C. Annotations       │  │
-│   │ pdfminer, stream   │ │ pdftotext + layout  │ │ pdfplumber           │  │
-│   │ order, no layout   │ │ analysis (reading   │ │ link annots (URI),   │  │
-│   │ analysis           │ │ order by x/y)       │ │ anchor text, page    │  │
-│   └─────────┬──────────┘ └──────────┬──────────┘ └──────────┬───────────┘  │
-│             │   chars + fonts + bboxes (pdfplumber)          │              │
-│             ▼                       ▼                        ▼              │
+│  2. Extraction engines (all from pdfplumber chars/words, all in memory)    │
+│   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐  │
+│   │ B. Smart     │ │ A. Simple    │ │ S. Raw PDF   │ │ C. Annotations   │  │
+│   │ (modern)     │ │ (legacy)     │ │ order        │ │ link URIs,       │  │
+│   │ column-aware │ │ straight     │ │ (stream)     │ │ anchor text,     │  │
+│   │ via gutter   │ │ across page, │ │ content-     │ │ page             │  │
+│   │ detection    │ │ no columns   │ │ stream order │ │                  │  │
+│   └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └────────┬─────────┘  │
+│          ▼                ▼                ▼                  ▼            │
 │  3. Layout diagnostics                                                     │
 │     column detection (x-clustering) · header/footer zones · tables ·       │
 │     image-only pages · fonts missing ToUnicode · icon/PUA glyphs ·         │
@@ -108,12 +125,31 @@ Planning. No code yet.
         Nothing is stored. The PDF bytes are freed when the request ends.
 ```
 
-### Why two text engines
+### Why several text engines
 
-Real ATSs disagree with each other. Engine A shows the worst case (a stream-order
-parser like old Taleo or iCIMS). Engine B shows what a decent modern parser
-produces. If A and B differ a lot, the layout is fragile, and that is the most
-useful signal for the user. The field parser runs on B, with a toggle to run it on A.
+Real ATSs disagree with each other, so the tool shows a spread of readings:
+
+- **B, Smart** (`engines/modern.py`): lines read straight across, so a right-aligned
+  date stays with its job, unless `geometry.find_gutter` finds a column gutter. In
+  that case each run of lines not crossing the gutter is read left column, then
+  right column. A gutter that is just the border between ruled table cells doesn't count.
+- **A, Simple** (`engines/legacy.py`): straight across the full page with no column
+  detection. This is what position-sorting extractors (pdftotext -layout, PDFBox
+  sorted by position) give cheaper ATSs. Two-column layouts interleave.
+- **S, Raw PDF order** (`engines/stream.py`): content-stream order, as in Apache
+  Tika's default PDF parser. Catches design-tool exports whose text boxes are
+  stored out of order (`ORDER_MISMATCH`).
+
+The field parser runs on B and A (the UI toggles between them). If B and A
+differ a lot, the layout is fragile, and that is the most useful signal for the user.
+
+### Gutter detection (`engines/geometry.py`)
+
+For each x in the middle 70% of the page: a line is *split* if it has words on
+both sides of x and none covering it, and *crossing* if a word covers it. A
+gutter needs ≥5 split lines, split/(split+crossing) ≥ 0.6, and ≥8pt width.
+Right-aligned dates split a few lines, but the bullet lines cross, so a single
+column never qualifies.
 
 ### Why no LLM in the parse path
 
@@ -127,7 +163,10 @@ itself.
 ```json
 {
   "meta":   { "pages": 2, "producer": "Canva", "has_text_layer": true },
-  "engines": { "legacy": "raw text...", "modern": "raw text..." },
+  "engines": { "modern": "raw text...", "legacy": "raw text...", "stream": "raw text..." },
+  "legacy_fields": { "...": "same shape as fields, parsed from the legacy text" },
+  "layout": { "gutters": {}, "order_similarity": 0.27, "stream_similarity": 1.0,
+              "header_footer": [], "glyphs": {}, "tables": 0, "images": 0 },
   "fields": {
     "contact":   { "name": "...", "email": "...", "phone": "...", "location": "...", "urls": [] },
     "experience": [ { "title": "...", "company": "...", "start": "2023-06", "end": "present", "bullets": [] } ],
@@ -149,41 +188,54 @@ itself.
 | Code | Severity | Meaning |
 |---|---|---|
 | `NO_TEXT_LAYER` | high | Image-only page; the ATS reads nothing |
-| `MULTI_COLUMN` | high | Columns detected and engines A/B disagree on order |
-| `GARBLED_GLYPHS` | high | Font without ToUnicode map, or many replacement/PUA chars |
+| `MULTI_COLUMN` | high | Column gutter detected; Simple and Smart readings disagree |
+| `GARBLED_GLYPHS` | high | Unmapped glyphs `(cid:N)` *inside words* (a lost bullet glyph doesn't count) |
+| `ORDER_MISMATCH` | medium | Raw PDF order differs from visual order (<85% alike) |
+| `NO_NAME` | medium | No name-like line at the top of the Smart reading |
+| `NO_EXPERIENCE` | medium | No recognised Experience heading |
 | `CONTACT_IN_HEADER` | medium | Email/phone only inside the header/footer zone |
 | `LINK_HIDDEN` | medium | URL only in an annotation, not visible as text |
 | `LINK_MISMATCH` | medium | Visible URL text differs from the annotation target |
 | `LINK_DEAD` | medium | Liveness check returned 4xx/5xx or timed out |
-| `UNKNOWN_HEADING` | medium | Section heading not in the dictionary |
-| `TABLE_LAYOUT` | low | Content laid out in tables |
-| `ICON_GLYPHS` | low | Icon-font characters in the text |
-| `DATE_FORMAT` | low | Dates that couldn't be parsed |
+| `UNKNOWN_HEADING` | medium | All-caps heading not in the dictionary, or letter-spaced (`E D U C A T I O N`) |
+| `TABLE_LAYOUT` | low | Content laid out in ruled tables |
+| `ICON_GLYPHS` | low | Private-use (icon font) characters in the text |
+| `LIGATURES` | low | ﬁ/ﬂ ligature characters, which break keyword matching |
+| `DATE_FORMAT` | low | Experience entries with no recognisable date range |
 
-## Project layout (planned)
+The catalogue (severity + fix text) lives in `app/issues.py`. Score = 100 minus
+25/10/3 per distinct high/medium/low code.
+
+## Project layout
 
 ```
 ats-parser/
 ├── app/
-│   ├── main.py            FastAPI routes, static files, /health
-│   ├── guard.py           upload validation
-│   ├── engines/           legacy.py, modern.py, annotations.py
-│   ├── diagnostics.py     columns, header/footer, fonts, tables
-│   ├── fields/            contact.py, sections.py, experience.py, education.py, skills.py
+│   ├── main.py            FastAPI: /, /health, POST /api/parse (docs disabled)
+│   ├── cli.py             python -m app.cli resume.pdf
+│   ├── guard.py           upload validation (size, pages, %PDF, encryption)
+│   ├── engines/           geometry.py, modern.py, legacy.py, stream.py, annotations.py
+│   ├── diagnostics.py     columns, order, header/footer, glyphs, tables
+│   ├── fields/            dates.py, sections.py, contact.py, entries.py, skills.py
 │   ├── links.py           link audit + SSRF-safe liveness check
-│   ├── report.py          issues + score
-│   ├── adapters/          commercial parser (optional)
-│   └── static/index.html
+│   ├── issues.py          issue catalogue
+│   ├── report.py          orchestration + score
+│   └── static/            index.html, style.css, app.js (vanilla, textContent only)
 ├── tests/
+│   ├── make_fixtures.py   generates the fixture PDFs with reportlab
 │   ├── fixtures/          generated test PDFs (committed)
-│   └── fixtures/private/  my real resume (gitignored)
-├── Dockerfile
-├── requirements.txt
+│   ├── fixtures/private/  my real resume (gitignored)
+│   ├── test_fixtures.py   expected issues/fields per layout
+│   └── test_units.py      dates, headings, SSRF guard
+├── Dockerfile             python:3.12-slim multi-stage, non-root, linux/arm64
+├── requirements.txt       runtime only; requirements-dev.txt adds pytest + reportlab
 ├── .env.example
 └── README.md
 ```
 
 ## Plan
+
+Phases 1–4 are done. The text below is the original plan, kept for reference.
 
 **Phase 1: Extraction core (CLI first).**
 `python -m app.cli resume.pdf` prints both engines' raw text, all link annotations
@@ -213,9 +265,20 @@ got right and wrong in `tests/calibration.md`, then tune the heuristics until ou
 legacy/modern outputs bracket what the real systems did.
 
 **Phase 6: Docker + deploy.**
-`python:3.12-slim` multi-stage, `apt-get install poppler-utils`, non-root user.
-Build and test locally with `docker build`, push, then tell Vincent it's ready
-for `new-project.sh ats-parser 8000 ...`.
+`python:3.12-slim` multi-stage, non-root user. Built and tested locally
+(`docker build --platform linux/arm64`, `--memory 256m`). Image ~320 MB, ~45 MB RAM.
+Remaining: tell Vincent it's ready for `new-project.sh ats-parser 8000 ...`.
+
+## Known gaps
+
+- Parse timeout is `asyncio.wait_for` around a thread: the client gets a 504, but
+  the thread runs to completion. `PARSE_CONCURRENCY` caps how many can pile up.
+  Move parsing to a subprocess before going public.
+- No per-IP rate limit yet.
+- Two-digit years (`Jun '21`) aren't parsed. Many ATSs fail on them too, but it
+  isn't flagged yet.
+- Name detection is text-only (first short line of plain words). Commercial
+  parsers also use font size, so `NO_NAME` may be harsher than they are.
 
 **Phase 7 (optional):** commercial parser column, job-description keyword
 match, AI suggestions panel.
