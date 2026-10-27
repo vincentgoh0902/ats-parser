@@ -13,8 +13,7 @@ something, this tool has to garble it the same way and explain why.
 ## Status
 
 Phases 1–4 done and 6 partly done: CLI, field parser, link auditor, web UI, Dockerfile
-(arm64 image builds and runs at ~45 MB RAM), plus the job description matcher.
-48 tests pass. Next: phase 5,
+(arm64 image builds and runs at ~45 MB RAM). 33 tests pass. Next: phase 5,
 calibrating against real ATSs with my real resume. Not yet added to the homelab.
 
 Run locally:
@@ -159,56 +158,6 @@ read and hide the very problem this tool exists to show. An LLM could be added
 later as a separate, clearly labelled "AI suggestions" panel, never as the parser
 itself.
 
-## Job description matcher (`app/match/`)
-
-Paste a job ad, upload a resume, get a fit score with matched and missing keywords
-highlighted in both texts. It is keyword-based with no LLM, on purpose: most ATS
-searches are literal keyword matches.
-
-```
-JD text ─▶ jd.py: lines tagged required / preferred / responsibilities / ignore
-           (by heading, overridden by "a plus", "preferred" on the line);
-           title, "N+ years", lowest degree level + fields
-        ─▶ taxonomy.py (~210 skills with aliases, case-sensitive for Go/R/C/Excel/Spring)
-           + phrases.py (RAKE key phrases for terms the taxonomy doesn't know)
-        ─▶ matcher.py: find each term in the Smart reading of the resume
-           matched in Experience/Projects/Summary  = 1.0 credit
-           matched only in Skills list / header     = 0.85
-           partial (implied: PostgreSQL ⇒ SQL; phrase words in one line) = 0.5
-        ─▶ score = Required 55 · Preferred 15 · Title 10 · Years 10 · Education 10
-           (components the job doesn't mention are dropped and the rest rescaled)
-        ─▶ suggestions + character spans in both texts for the UI
-```
-
-- Sections: headings glued onto the next sentence by job-board copy/paste ("The RoleWe are…")
-  are split off. "About <Company>" is ignored and the company name is never a phrase.
-  "This role is not for…" sections are `exclude` (never counted). Location, language and
-  interview-process sections are ignored. Text before the first heading is `intro`
-  (skills count at responsibility weight, no phrases).
-- Taxonomy aliases starting with `~` only count on a line that also mentions AI
-  ("evaluations" next to "LLMs", not "performance evaluations"). Bare "security" is not
-  a skill; only qualified forms ("information security", "AppSec") are.
-- RAKE phrases drop possessives ("BJAK's"), negated runs ("not just AI strategy") and
-  generic words ("real", "similar", "problems").
-- Each tricky real job ad becomes a regression sample in `tests/jd/` with a test that
-  pins its headings and its good/bad keywords (`bjak_ai_engineer.txt` is the first).
-- A skill nested in a longer one in the job ad ("GitHub" in "GitHub Actions") is dropped.
-- Term weight: required 1.0, responsibilities 0.8, ×1.2/×1.4 if repeated, soft
-  skills and RAKE phrases ×0.4.
-- Years = merged, deduplicated months across dated experience entries (internships count).
-- Title = share of the job title's core words (seniority stripped,
-  scientist≈science etc.) found in the closest resume title.
-- `POST /api/parse` takes an optional `job_description` form field (≤20k chars)
-  and adds a `match` key. CLI: `python -m app.cli resume.pdf --jd job.txt`.
-- UI: Job match tab (score, breakdown, missing, suggestions, matches, highlighted
-  job ad). The left pane switches to the highlighted resume text. Clicking any
-  keyword focuses it in both texts.
-- Sample job ads for tests are in `tests/jd/`.
-
-Known limits: no paraphrase matching ("built backend services" ≠ "REST APIs"). An
-optional embedding pass (MiniLM via ONNX) could add it later, but check the 256 MB
-memory limit first. The taxonomy leans toward tech and data roles.
-
 ## Output (API contract, `POST /api/parse`)
 
 ```json
@@ -333,6 +282,12 @@ Remaining: tell Vincent it's ready for `new-project.sh ats-parser 8000 ...`.
 
 **Phase 7 (optional):** commercial parser column, job-description keyword
 match, AI suggestions panel.
+
+**Scope decision (2026-10-27):** this app stays a parse checker. A job-description
+matcher and a resume editor with keyword suggestions were built, then parked on the
+branch `job-match-editor` (not merged): literal keyword scoring gave misleading
+results on real job ads. Parse fixes found along the way were kept on main
+("Skills Summary" heading, single-date projects, bracketed skill notes).
 
 ## Accuracy: what to promise
 

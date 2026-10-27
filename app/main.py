@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app import guard, report
-from app.match import matcher
 
 PARSE_TIMEOUT = float(os.environ.get("PARSE_TIMEOUT", "10"))
 CONCURRENCY = asyncio.Semaphore(int(os.environ.get("PARSE_CONCURRENCY", "2")))
@@ -35,8 +34,7 @@ def health():
 
 
 @app.post("/api/parse")
-async def parse(file: UploadFile = File(...), check_links: bool = Form(False),
-                job_description: str = Form("", max_length=20_000)):
+async def parse(file: UploadFile = File(...), check_links: bool = Form(False)):
     data = await file.read(guard.MAX_BYTES + 1)
     await file.close()
     async with CONCURRENCY:
@@ -44,8 +42,6 @@ async def parse(file: UploadFile = File(...), check_links: bool = Form(False),
             result = await asyncio.wait_for(run_in_threadpool(report.build, data), PARSE_TIMEOUT)
             if check_links:
                 result = await asyncio.wait_for(report.add_liveness(result), PARSE_TIMEOUT)
-            if job_description.strip():
-                result["match"] = await run_in_threadpool(matcher.match, job_description, result)
         except guard.RejectedUpload as e:
             raise HTTPException(400, str(e))
         except asyncio.TimeoutError:
@@ -54,8 +50,7 @@ async def parse(file: UploadFile = File(...), check_links: bool = Form(False),
             # Never log the document; the error type is enough to debug.
             log.error("parse failed: %s", type(e).__name__)
             raise HTTPException(500, "Something went wrong while parsing this PDF.")
-    log.info("parsed pages=%s score=%s match=%s issues=%s", result["meta"]["pages"], result["score"],
-             result.get("match", {}).get("score", "-"),
+    log.info("parsed pages=%s score=%s issues=%s", result["meta"]["pages"], result["score"],
              ",".join(sorted({i["code"] for i in result["issues"]})) or "-")
     return result
 

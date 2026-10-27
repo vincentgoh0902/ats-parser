@@ -101,7 +101,8 @@ def _pick(parts: list[str], pattern) -> str | None:
 def extract(lines: list[str], kind: str) -> tuple[list[dict], list[str]]:
     """Return (entries, header lines that got no date)."""
     lines = _merge_lone_bullets([l for l in lines if l.strip()])
-    anchors = _anchors(lines, allow_single=(kind == "education"))
+    # A project or a degree often has one date ("Oct 2026"); a job has a range.
+    anchors = _anchors(lines, allow_single=kind in ("education", "projects"))
     if not anchors:
         return [], [l for l in lines if not is_bullet(l)][:3]
 
@@ -127,9 +128,10 @@ def extract(lines: list[str], kind: str) -> tuple[list[dict], list[str]]:
                 and len(lines[end + 1]) <= 60:
             end += 1
             parts, d_start, d_end, date_text = _parts(lines[start:end + 1], lines[anchor])
-        location = next((p for p in parts if _is_location(p)), None)
+        # In a project header "Python, LangGraph" is a stack, not "City, Region".
+        location = next((p for p in parts if _is_location(p)), None) if kind != "projects" else None
         # "San Francisco, CA" on its own line under the header.
-        if not location and end + 1 < body_end and _is_location(lines[end + 1].strip()):
+        if kind != "projects" and not location and end + 1 < body_end and _is_location(lines[end + 1].strip()):
             end += 1
             location = lines[end].strip()
         body = lines[end + 1:body_end]

@@ -3,7 +3,7 @@ import asyncio
 import httpx
 import pytest
 
-from app import links
+from app import links, report
 from app.fields import dates, sections
 
 
@@ -25,7 +25,7 @@ def test_phone_number_is_not_a_date_range():
 
 @pytest.mark.parametrize("line,key", [
     ("EXPERIENCE", "experience"), ("Work History:", "experience"),
-    ("Skills & Interests", "skills"), ("Where I've been", None),
+    ("Skills & Interests", "skills"), ("Skills Summary", "skills"), ("Where I've been", None),
 ])
 def test_heading_classification(line, key):
     assert sections.classify(line) == key
@@ -46,3 +46,30 @@ def test_link_check_refuses_private_targets(url):
 
 def test_link_norm():
     assert links.norm("https://www.GitHub.com/you/") == links.norm("github.com/you")
+
+
+def test_latex_resume_layout():
+    """Shape of a common LaTeX resume: a project dated with one month whose
+    header holds the stack, and a "Skills Summary" section with bracketed notes."""
+    text = """Alex Tan
+alex@example.com | github.com/alextan
+Experience
+Data Science Intern   Jul 2026 – Present
+Acme Corp
+• Built LLM pipelines on Databricks.
+Projects
+Graph Fraud Detection | XGBoost, PyTorch Geometric, Neo4j   Oct 2026
+• Compared XGBoost and GNNs on 203k transactions.
+Skills Summary
+Languages: Python, SQL, R
+LLM & GenAI: RAG, DSPy (Prompt Optimisation), Azure OpenAI
+Spoken Languages: English (Native), Mandarin (Fluent)
+"""
+    fields, _ = report.parse_fields(text)
+    assert [s["key"] for s in fields["sections"]][-2:] == ["projects", "skills"]
+    project = fields["projects"][0]
+    assert project["title"] == "Graph Fraud Detection" and project["date_text"] == "Oct 2026"
+    assert project["location"] is None  # "Python, LangGraph"-style stacks aren't "City, Region"
+    assert project["bullets"] == ["Compared XGBoost and GNNs on 203k transactions."]
+    assert fields["skills"] == ["Python", "SQL", "R", "RAG", "DSPy (Prompt Optimisation)", "Azure OpenAI",
+                                "English (Native)", "Mandarin (Fluent)"]

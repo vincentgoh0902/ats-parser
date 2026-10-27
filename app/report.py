@@ -47,7 +47,7 @@ def parse_fields(text: str) -> tuple[dict, list[dict]]:
                 f"'{p['heading']}' looks like a heading but isn't one the parser knows, so its "
                 f"content was filed under the previous section.", heading=p["heading"]))
 
-    projects, _ = entries.extract(by_key.get("projects", []), "experience")
+    projects, _ = entries.extract(by_key.get("projects", []), "projects")
     skill_lines = by_key.get("skills", [])
     fields = {
         "contact": contact.extract(by_key.get("top", [])[:12] or lines[:12], text),
@@ -58,7 +58,7 @@ def parse_fields(text: str) -> tuple[dict, list[dict]]:
         "education": education,
         "projects": projects if projects else by_key.get("projects", []),
         "skills": skills.from_section(skill_lines),
-        "skills_detected": skills.detect(text),
+        "skills_detected": skills.detect(text, "\n".join(skill_lines)),
         "other_sections": {k: v for k, v in by_key.items()
                            if k not in ("top", "summary", "experience", "education",
                                         "projects", "skills")},
