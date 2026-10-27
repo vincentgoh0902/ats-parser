@@ -20,7 +20,8 @@ HEADINGS = {
                   "bonus", "bonus points", "good to have", "desired", "desirable",
                   "preferred skills", "pluses", "extra credit", "it s a plus if"],
     "responsibilities": ["responsibilities", "what you ll do", "what you will do", "the role",
-                         "your role", "key responsibilities", "job description", "duties",
+                         "your role", "key responsibilities", "job description", "job descriptions", "duties",
+                         "job responsibilities", "job scope", "role and responsibilities",
                          "day to day", "in this role you will", "role overview", "about the role",
                          "what you ll be doing", "your responsibilities", "the job", "what you will build",
                          "what you ll build", "what you will work on", "what you ll work on",
@@ -42,6 +43,12 @@ _ALIASES = {a: k for k, aliases in HEADINGS.items() for a in aliases}
 ABOUT_COMPANY = re.compile(r"^about\s+(?!the\s+(?:role|job|team|position)\b|you\b|this\b|\d)"
                            r"[\w&.'’-]+(?:\s[\w&.'’-]+){0,3}:?$", re.I)
 NOT_FOR = re.compile(r"\b(?:not for|not a fit|isn t for|should not apply|won t enjoy)\b")
+# Who may apply, not what they need to know: "Singaporeans and PRs only", "no visa sponsorship".
+ELIGIBILITY = re.compile(r"\b(?:citizens?(?:hip)?|permanent residents?|PRs only|work pass(?:es)?|work permits?|"
+                         r"employment pass|visa sponsorship|right to work|authori[sz]ed to work|"
+                         r"work authori[sz]ation|security clearance)\b", re.I)
+# "Model development: Design, train..." starts with a label, a mini heading.
+INLINE_LABEL = re.compile(r"^\s*(?:[-•*·]\s*)?[A-Z][\w/&+-]*(?:\s+[\w/&+-]+){0,3}:\s+")
 # A heading glued onto the next sentence when copied from a job board: "The RoleWe are...".
 GLUED = re.compile(r"(?<=[A-Za-z])(?=[A-Z][a-z])")
 
@@ -51,11 +58,15 @@ REQUIRED_CUE = re.compile(r"\b(?:required|must|mandatory|essential)\b", re.I)
 
 YEARS_RE = re.compile(
     r"(?P<n>\d{1,2})\s*\+?\s*(?:(?:-|–|to)\s*\d{1,2}\s*)?\+?\s*(?:years?|yrs?)\b(?P<rest>[^.\n]{0,60})", re.I)
+# Abbreviations need word boundaries and a degree-like context: "ms" ends
+# "teams" and "200 ms" is a latency, neither is a Master's.
 DEGREE_LEVELS = [  # (level, label, pattern)
-    (4, "PhD", r"ph\.?\s?d|doctorate|doctoral"),
-    (3, "Master's", r"master'?s?|m\.?\s?sc?\b|msc|m\.eng|mba|graduate degree"),
-    (2, "Bachelor's", r"bachelor'?s?|\bb\.?\s?sc?\b|bsc|\bb\.a\.?|b\.eng|b\.?tech|undergraduate degree|university degree"),
-    (1, "Diploma", r"diploma|associate'?s? degree"),
+    (4, "PhD", r"\bph\.?\s?d\b|\bdoctorate\b|\bdoctoral\b"),
+    (3, "Master's", r"\bmaster'?s?\b(?!\s+(?:of\s+)?(?:data|records|copy|schedule|branch|list|plan|file))|"
+                    r"\bm\.\s?sc?\.?|\bms\s+(?:in|degree)\b|\bmsc\b|\bm\.?eng\b|\bmba\b|\bgraduate degree\b"),
+    (2, "Bachelor's", r"\bbachelor'?s?\b|\bb\.\s?sc?\.?|\bbs\s+(?:in|degree)\b|\bbsc\b|\bb\.a\.|"
+                      r"\bb\.?eng\b|\bb\.?tech\b|\bundergraduate degree\b|\buniversity degree\b"),
+    (1, "Diploma", r"\bdiploma\b|\bassociate'?s? degree\b"),
 ]
 FIELDS = ["computer science", "data science", "statistics", "mathematics", "applied mathematics",
           "computer engineering", "software engineering", "electrical engineering", "engineering",
@@ -75,7 +86,8 @@ def _norm_heading(line: str) -> str:
 
 def heading_kind(line: str) -> str | None:
     s = line.strip()
-    if not s or len(s) > 60:
+    # "- Experience with Django" is a requirement, not an "Experience" heading.
+    if not s or len(s) > 60 or re.match(r"[-–•*·▪●◦]\s", s):
         return None
     norm = _norm_heading(s)
     if norm in _ALIASES:
@@ -127,7 +139,9 @@ def lines_with_kind(text: str) -> list[tuple[int, int, str, str]]:
             out.append((start, end, "heading", raw))
             continue
         line_kind = current
-        if current not in ("ignore", "exclude"):
+        if ELIGIBILITY.search(raw):
+            line_kind = "ignore"
+        elif current not in ("ignore", "exclude"):
             if PREFERRED_CUE.search(raw):
                 line_kind = "preferred"
             elif REQUIRED_CUE.search(raw) and current in ("general", "intro"):
@@ -136,7 +150,21 @@ def lines_with_kind(text: str) -> list[tuple[int, int, str, str]]:
     return out
 
 
+AS_A_TITLE = re.compile(r"\bAs an? ((?:[A-Z][\w/&+.-]*\s?){1,5}?)(?:,|\s+you\b)")
+
+
 def detect_title(text: str) -> str | None:
+    found = _title_line(text)
+    if found:
+        return found
+    # "As an AI Engineer, you will..."
+    for m in AS_A_TITLE.finditer(text[:3000]):
+        if TITLE_WORDS.search(m.group(1)):
+            return m.group(1).strip()
+    return None
+
+
+def _title_line(text: str) -> str | None:
     for raw in text.split("\n")[:8]:
         line = re.sub(r"^\s*(?:job\s+title|position|role)\s*[:\-–]\s*", "", raw, flags=re.I).strip()
         line = re.split(r"\s+[|–—-]\s+|\s*\(", line)[0].strip()

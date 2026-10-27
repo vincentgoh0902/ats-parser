@@ -18,7 +18,12 @@ def from_section(lines: list[str]) -> list[str]:
         if ":" in line[:40]:
             line = line.split(":", 1)[1]
         for item in re.split(r"[,;|•·]|\s{2,}|\s+and\s+", line):
-            item = item.strip(" .()")
+            item = item.strip(" .")
+            # "(Prompt Optimisation)" keeps its brackets; a stray one from a split doesn't.
+            if item.count("(") != item.count(")"):
+                item = item.strip("()")
+                if item.count("(") > item.count(")"):
+                    item += ")"
             if item and len(item) <= 40 and item.lower() not in (i.lower() for i in items):
                 items.append(item)
     return items

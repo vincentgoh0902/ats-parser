@@ -128,3 +128,45 @@ def test_ai_engineer_job_terms(resume):
 ])
 def test_context_only_aliases(text, hits):
     assert [m.group(0) for m in BY_NAME["LLM Evaluation"].finditer(text)] == hits
+
+
+def test_bullet_starting_with_heading_word_is_not_a_heading():
+    parsed = jd.parse("Requirements\n- Experience with Django\n- Skills in SQL\nNice to have\n• Kafka")
+    kinds = [k for _, _, k, _ in parsed["lines"]]
+    assert kinds == ["heading", "required", "required", "heading", "preferred"]
+
+
+@pytest.mark.parametrize("text,label", [
+    ("Work closely with backend and mobile teams", None),   # "ms" in "teams"
+    ("p95 latency under 200 ms", None),
+    ("Familiar with webmaster tools and master data management", None),
+    ("MS in Computer Science or related field", "Master's"),
+    ("B.Sc. in Mathematics", "Bachelor's"),
+    ("Bachelor's or Master's degree in Statistics", "Bachelor's"),
+    ("MBA preferred", "Master's"),
+])
+def test_degree_patterns(text, label):
+    found = jd.parse("Requirements\n" + text)["degree"]
+    assert (found and found["label"]) == label
+
+
+def test_medtech_job_ad():
+    # e2i Talent Link ad: eligibility line, "Job Descriptions" heading, "Label: duty" lines.
+    parsed = jd.parse((HERE / "jd" / "medtech_ai_engineer.txt").read_text())
+    assert parsed["title"] == "AI Engineer"  # from "As an AI Engineer, you will..."
+    assert parsed["degree"] is None
+    kinds = {line.strip()[:20]: k for _, _, k, line in parsed["lines"]}
+    assert kinds["Talent Link by e2i i"] == "ignore"  # "Singaporeans and PRs only"
+    assert kinds["Job Descriptions"] == "heading"
+
+
+def test_medtech_job_terms(resume):
+    t = terms(run(resume, "medtech_ai_engineer"))
+    for skill in ("Small Language Models", "Edge AI", "Model Quantization", "Model Compression",
+                  "AWS", "GCP", "CI/CD", "Retrieval-Augmented Generation", "Technical Documentation",
+                  "Medical Device Software"):
+        assert skill in t, skill
+    labels = " | ".join(t).lower()
+    for bad in ("permanent residents", "bring small", "constrained clinical", "contribute technical",
+                "release models", "model development", "pipeline maintenance", "edge deployment:"):
+        assert bad not in labels, bad

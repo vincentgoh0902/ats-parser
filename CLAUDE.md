@@ -14,7 +14,7 @@ something, this tool has to garble it the same way and explain why.
 
 Phases 1–4 done and 6 partly done: CLI, field parser, link auditor, web UI, Dockerfile
 (arm64 image builds and runs at ~45 MB RAM), plus the job description matcher.
-48 tests pass. Next: phase 5,
+71 tests pass. Phase 8 v1 (resume editor) done. Next: phase 5,
 calibrating against real ATSs with my real resume. Not yet added to the homelab.
 
 Run locally:
@@ -271,13 +271,16 @@ ats-parser/
 │   ├── links.py           link audit + SSRF-safe liveness check
 │   ├── issues.py          issue catalogue
 │   ├── report.py          orchestration + score
-│   └── static/            index.html, style.css, app.js (vanilla, textContent only)
+│   ├── edit/              model.py (editor schema + prefill), render.py (PDF), check.py (read-back + suggestions)
+│   └── static/            index.html, style.css, app.js, editor.js (vanilla, textContent only)
 ├── tests/
 │   ├── make_fixtures.py   generates the fixture PDFs with reportlab
 │   ├── fixtures/          generated test PDFs (committed)
 │   ├── fixtures/private/  my real resume (gitignored)
 │   ├── test_fixtures.py   expected issues/fields per layout
-│   └── test_units.py      dates, headings, SSRF guard
+│   ├── test_units.py      dates, headings, SSRF guard
+│   ├── test_match.py      job matcher
+│   └── test_edit.py       editor: round trips, read-back, suggestions, endpoints
 ├── Dockerfile             python:3.12-slim multi-stage, non-root, linux/arm64
 ├── requirements.txt       runtime only; requirements-dev.txt adds pytest + reportlab
 ├── .env.example
@@ -317,7 +320,7 @@ legacy/modern outputs bracket what the real systems did.
 
 **Phase 6: Docker + deploy.**
 `python:3.12-slim` multi-stage, non-root user. Built and tested locally
-(`docker build --platform linux/arm64`, `--memory 256m`). Image ~320 MB, ~45 MB RAM.
+(`docker build --platform linux/arm64`, `--memory 256m`). Image ~335 MB, ~55 MB RAM with the editor.
 Remaining: tell Vincent it's ready for `new-project.sh ats-parser 8000 ...`.
 
 ## Known gaps
@@ -332,7 +335,110 @@ Remaining: tell Vincent it's ready for `new-project.sh ats-parser 8000 ...`.
   parsers also use font size, so `NO_NAME` may be harsher than they are.
 
 **Phase 7 (optional):** commercial parser column, job-description keyword
-match, AI suggestions panel.
+match (done), AI suggestions panel (see Phase 8 v2).
+
+## Phase 8: Resume editor with keyword suggestions
+
+The user fixes their resume inside the app and downloads a clean PDF on the spot.
+We don't edit their PDF (PDF text doesn't reflow and subset fonts lack new glyphs).
+We **rebuild** it from the parsed fields with our own ATS-safe template. The user's
+visual design is not kept; that trade-off is stated in the UI.
+
+### v1: deterministic, no LLM (done)
+
+**Flow.** After a parse (and optionally a job match), an "Edit & download" tab
+opens a form prefilled from `fields` (Smart reading): contact, summary,
+experience/projects entries (title, company, location, dates, bullets), education,
+skills, other sections as plain bullet lists. The user can also correct anything
+the parser got wrong. Edits live only in the page (nothing stored server-side; warn
+before leaving with unsaved edits). "Download PDF" renders; "Check it" re-runs the
+rendered PDF through the parser and the job match so the score change is visible.
+
+**Suggestions (`app/edit/suggest.py`).** Built from the match `terms`, each tied
+to one place in the form (`experience[0].bullets[2]`, `skills`, `summary`):
+
+| Kind | Trigger | What the user gets |
+|---|---|---|
+| `wording` | matched, but the job's wording differs ("Golang" vs "Go") | one-click swap in the bullets that use it |
+| `implied` | missing, but implied (`PostgreSQL` ⇒ `SQL`) | one-click "PostgreSQL (SQL)" on the bullet that names it |
+| `evidence` | only in the Skills list | highlight the best-fit bullet, "show it in use here"; no auto-text |
+| `missing` | not on the resume at all | ranked best-fit bullets + "add to Skills"; **only after the user ticks "I have used this"** |
+
+Best-fit bullet = stemmed word overlap between the bullet and the job ad lines
+the term came from (`jd_spans`), plus a boost when the bullet names a related
+skill (same category, or `IMPLIES` either way). Show the top 1–2 bullets, never
+more. Every suggestion is shown, accepted or dismissed by the user; nothing is
+applied automatically. Never suggest inventing numbers, titles or employers.
+
+**Rendering (`app/edit/render.py`).** reportlab (moves from dev to runtime
+deps; pure Python, small). The template is one column and follows our own issue
+list, so the output must trigger zero issues:
+- a bundled OFL font (e.g. Noto Sans or DejaVu Sans) with a ToUnicode map, so
+  non-Latin-1 names render and extract cleanly; no ligatures, no icon glyphs
+- standard headings from `sections.py` (Summary, Experience, Projects,
+  Education, Skills); no tables, columns, text boxes or header/footer content
+- "Title, Company · Location" on one line and the dates on the same line, in a
+  format `dates.py` parses ("Jan 2023 – Present")
+- links written out as visible text (no hidden anchor text)
+- plain "•" bullets, letter or A4 page size (user choice), aim for 1–2 pages
+
+**API.**
+- `POST /api/parse` now also returns `resume`: the editor prefill (`edit/model.py: from_fields`).
+- `POST /api/check` `{resume, job_description}` → `{pages, issues, parse_score, mismatches,
+  match: {score, band, breakdown}, suggestions}`. It renders the PDF, parses it back
+  (`report.build`), compares field by field (`mismatches`, each with a form `path` and
+  a hint) and runs the job match on the rendered PDF. ~0.3 s.
+- `POST /api/render` resume JSON → `application/pdf`.
+- Both: body read up to 100 KB before parsing (413 above), pydantic caps on field
+  lengths and counts (422), control/invisible characters stripped, same concurrency
+  cap and timeout as `/api/parse`.
+
+**Implementation notes (learned while building).**
+- Font: Bitstream Vera from the reportlab package (TTF with ToUnicode, so "•" extracts
+  as "•"; Helvetica's comes out as `(cid:127)`). Characters it lacks render as "?".
+- The last bullet of an entry that's followed by another entry gets a full stop:
+  otherwise its wrapped tail ("three regional teams") is taken as the next job's
+  header. Real ATSs make the same mistake.
+- Education is "School  dates" / "Degree, GPA" / "Location": with the location on the
+  date line the parser stops pulling in the degree line.
+- A bare `name.dev` link is written as `https://name.dev` (parsers only read bare
+  domains for known sites).
+- A contact location that isn't "City, Region" is flagged, not silently rewritten:
+  matching what parsers read is the point of the app.
+- An unreadable date merges the entry into the one above; the side-effect bullet
+  mismatches on the entry above are suppressed and the date hint says so.
+- Wrapping never leaves a continuation line that parses as something else: a lone
+  "leadership" is the Leadership heading, a date range starts a new job. `_split`
+  narrows the column until no such line is left.
+- Characters Vera lacks get a look-alike ("∼" -> "~", "≥" -> ">="), else "?". The
+  read-back compares through the same substitution.
+- Skills and contact lines break only between items, never inside "DSPy (Prompt
+  Optimisation)" or an email. Long entry headers shrink to 8.5pt before wrapping.
+- Projects keep their whole header ("Name | stack | links") as the title; ATSs have no
+  fields for it, so the read-back doesn't compare project titles.
+- UI (`static/editor.js`): the form re-renders only on structural edits; typing
+  re-checks after 1.2 s. While on the tab, the left pane shows the rebuilt PDF.
+
+**Tests.**
+- Round trip: render a resume JSON → `report.build` → the fields come back equal,
+  and both engines report zero issues. Run it on several shapes (no summary,
+  long bullets that wrap, 2 pages, accented names, a URL-heavy contact line).
+- Suggestion units: wording swap target, implied append, best-fit ranking,
+  missing keywords never produce text until confirmed.
+
+**Out of scope for v1:** keeping the original design, LaTeX/Overleaf or .docx
+input, any LLM call.
+
+### v2: opt-in AI rewrite per bullet (later)
+
+A "Rewrite with AI" button per bullet, in a clearly labelled panel, never in the
+parse path. Needs an LLM API (no GPU on the server, 256 MB limit), so a key in
+`app.env`, rate limiting and a spend cap. Guardrails: the model may only rephrase
+facts already in the bullet plus keywords the user ticked as "I have used this";
+output is shown as an accept/reject diff; any number, tool or claim not in the
+original bullet is flagged; the matcher re-checks the result. Sending resume text to
+an API breaks the "processed in memory and discarded" promise, so it is opt-in with
+a notice.
 
 ## Accuracy: what to promise
 

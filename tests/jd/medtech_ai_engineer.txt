@@ -1,0 +1,12 @@
+About the job
+Talent Link by e2i is a programme to match candidates to job opportunities offered by e2i’s Industry Partners. Applicable for Singaporeans and Singapore Permanent Residents only.
+This job opportunity is from our Industry Partner in the Biotech Industry.
+Job Descriptions
+As an AI Engineer, you will work with our tech team to improve our 2D/3D vision models and bring small language model (SLM) and retrieval-augmented generation (RAG) capabilities to edge devices. You will also help build the testing, validation, and documentation that meet the standards of regulators such as the HSA and FDA.
+Model development: Design, train, and iterate on 2D/3D computer vision models for gait and movement analysis that power 3DGait’s core clinical capability.
+Edge deployment: Build and deploy SLM-based RAG pipelines optimized for edge environments, including model compression, quantization, and latency and memory tuning for constrained clinical hardware.
+Model quality assurance: Design test protocols, benchmarking suites, and accuracy and performance metrics that meet the standard of clinical scrutiny.
+Regulatory support: Contribute technical documentation, validation evidence, and risk assessments aligned with SaMD requirements (FDA/HSA, ISO 13485/62304), working alongside our clinical and regulatory leads.
+Pipeline maintenance: Maintain the CI/CD and cloud deployment pipeline (AWS/GCP) used to release models.
+Cross-functional collaboration: Work closely with backend, mobile, and clinical teams to ensure your work integrates seamlessly into the product used by clinicians.
+Documentation: Maintain clear records of what you have built, tested, and validated.

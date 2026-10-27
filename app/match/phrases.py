@@ -37,6 +37,7 @@ talk start started expand expanding enable enabling reduce improve worth quickly
 just only even really truly around without instead whether things thing something lot lots
 able willing passionate passion driven talented highly highlights highlight career careers
 problems problem issues challenges reliable robust rather avoid
+constrained seamless seamlessly clear core closely
 """.split())
 SPLIT_RE = re.compile(r"[.,;:!?()\[\]{}\"'“”‘’/|•*·\n]+|\s[-–—]\s|\s+&\s+")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]*[A-Za-z0-9+#]|[A-Za-z]")
@@ -52,6 +53,12 @@ def stem(word: str) -> str:
     return w
 
 
+# Verbs that start a duty ("bring small language models", "release models"):
+# dropped from the front of a phrase, but not everywhere, since "release
+# engineering" or "training data" are real terms.
+LEADING_VERBS = {"bring", "contribute", "release", "iterate", "train", "power", "meet", "integrate",
+                 "optimize", "optimise", "tune", "ship", "enable", "establish", "implement", "translate",
+                 "research", "explore", "evaluate", "monitor", "test", "validate", "document", "automate"}
 NEGATORS = {"not", "no", "never", "without", "instead", "rather", "avoid"}
 POSSESSIVE_RE = re.compile(r"(?<=\w)['’]s\b")
 
@@ -81,6 +88,7 @@ def candidates(text: str, extra_stop: set[str] = frozenset()) -> list[list[str]]
                 run.append(tok)
         if run and not negated:
             out.append(run)
+    out = [c[1:] if len(c) > 1 and c[0].lower() in LEADING_VERBS else c for c in out]
     return [c for c in out if len(c) <= MAX_WORDS]
 
 

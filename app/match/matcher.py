@@ -252,7 +252,8 @@ def match(jd_text: str, report: dict) -> dict:
     usable = [(s, e, k) for s, e, k, _ in jd["lines"]
               if k not in SKIP_KINDS | {"intro"} and not on_scored_line(s, e)]
     jd_skill_spans = [tuple(sp) for t in terms for sp in t["jd_spans"]]
-    phrase_text = "\n".join(jd["text"][s:e] for s, e, _ in usable)
+    # Inline labels ("Model development: ...") are mini headings, not keywords.
+    phrase_text = "\n".join(jdparse.INLINE_LABEL.sub("", jd["text"][s:e]) for s, e, _ in usable)
     company_words = set(jd["company"].split()) if jd["company"] else set()
     for p in phrases.extract(phrase_text, limit=25, extra_stop=company_words):
         spans, kinds = [], set()

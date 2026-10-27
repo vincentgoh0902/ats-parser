@@ -64,18 +64,28 @@ async function upload(file) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return setStatus(data.detail || `Error ${res.status}`, true);
+  try {
+    showResult(file, data, jdText);
+  } catch (err) {
+    // Never leave "Parsing…" on screen: a stale cached script is the usual cause.
+    console.error(err);
+    setStatus(`Couldn't show the result (${err.message}). Try reloading the page.`, true);
+  }
+}
 
+function showResult(file, data, jdText) {
   if (state.file !== file) {
+    editorStart(data.resume);
     if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
     state.previewUrl = URL.createObjectURL(file);
-    $("#preview").src = state.previewUrl;
-    $("#filename").textContent = file.name;
   }
+  if (state.file === file) ed.stale = true;  // same resume, new job ad: keep the edits, re-check
   state.file = file;
   state.matchedJd = jdText;
   state.report = data;
   state.active = null;
-  if (data.match) { state.tab = "match"; state.left = "marks"; }
+  if (state.tab === "edit") { /* stay in the editor */ }
+  else if (data.match) { state.tab = "match"; state.left = "marks"; }
   else { if (state.tab === "match") state.tab = "issues"; state.left = "pdf"; }
   updateJdUi();
   setStatus("");
@@ -111,7 +121,7 @@ function render() {
     b.classList.toggle("on", b.dataset.engine === state.engine);
     b.disabled = b.hasAttribute("data-text-only") && state.tab !== "text";
   });
-  $(".engine-bar").hidden = ["issues", "links", "match"].includes(state.tab);
+  $(".engine-bar").hidden = ["issues", "links", "match", "edit"].includes(state.tab);
 
   const score = $("#score");
   score.textContent = `Parse health ${r.score}/100`;
@@ -124,14 +134,32 @@ function render() {
     if (counts[b.dataset.tab]) b.append(h("span", { class: "count" }, counts[b.dataset.tab]));
   });
 
-  const views = { match: renderMatch, issues: renderIssues, fields: renderFields, text: renderText, links: renderLinks };
+  const views = { match: renderMatch, issues: renderIssues, fields: renderFields, text: renderText, links: renderLinks,
+    edit: renderEditor };
   const target = $(`#tab-${state.tab}`);
   target.replaceChildren(...[views[state.tab](r)].flat());
   renderLeft();
 }
 
 // ---- left pane: PDF or highlighted resume text ----
+function showPdf(url) {
+  const frame = $("#preview");
+  if (url && frame.dataset.src !== url) { frame.src = url; frame.dataset.src = url; }
+}
+
 function renderLeft() {
+  if (state.tab === "edit") {
+    // The editor previews the rebuilt PDF; the original is one tab away.
+    $("#left-view").hidden = true;
+    $("#left-title").textContent = "Your new PDF";
+    $("#filename").textContent = ed.stale ? "updating…" : "rebuilt from your edits";
+    $("#preview").hidden = false;
+    $("#resume-doc-wrap").hidden = true;
+    showPdf(ed.pdfUrl);
+    return;
+  }
+  $("#filename").textContent = state.file?.name || "";
+  showPdf(state.previewUrl);
   const m = state.report?.match;
   const marks = Boolean(m) && state.left === "marks";
   $("#left-view").hidden = !m;

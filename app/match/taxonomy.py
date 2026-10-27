@@ -102,6 +102,14 @@ _RAW = {
         Qdrant
         Document Processing|document handling|document understanding|intelligent document processing|IDP
         OCR|optical character recognition
+        Small Language Models|SLM|SLMs|small language model
+        Model Quantization|quantization|quantisation|quantized|INT8
+        Model Compression|pruning|knowledge distillation|model distillation
+        Edge AI|edge deployment|edge devices|edge inference|on-device ML|on-device inference|TinyML
+        TensorRT
+        TensorFlow Lite|TFLite|LiteRT
+        Pose Estimation|human pose|gait analysis|motion analysis|movement analysis
+        3D Vision|3D computer vision|point cloud|depth estimation|2D/3D vision
         Reinforcement Learning|RL
         PyTorch|Torch
         PyTorch Geometric|PyG
@@ -158,6 +166,8 @@ _RAW = {
         Risk Management|risk review|risk assessment|risk modelling|risk modeling|credit risk
         Regulatory Compliance|compliance requirements|regulatory requirements
         Onboarding|customer onboarding|user onboarding
+        Medical Device Software|SaMD|software as a medical device|IEC 62304|ISO 13485|medical devices
+        Healthcare|clinical|digital health|healthtech
     """,
     "data": """
         Pandas
@@ -266,6 +276,7 @@ _RAW = {
         Algorithms
         Object-Oriented Programming|OOP|object oriented
         Code Review|code reviews
+        Technical Documentation|technical writing|technical docs|technical documents
         Cybersecurity|cyber security|information security|InfoSec|application security|AppSec|network security|cloud security|security engineering|secure coding
         Product Analytics
         SQL Optimization|query optimization
