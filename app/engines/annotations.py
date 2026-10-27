@@ -6,6 +6,21 @@ rectangle.
 """
 
 
+def _anchor_text(page, x0, top, x1, bottom) -> str:
+    """Characters whose centre lies inside the link rectangle.
+
+    Link rectangles are often taller than the text (LaTeX's hyperref pads them),
+    so the bottom of a large heading above can poke in. Counting any overlap would
+    splice those letters into the anchor text; counting by centre doesn't.
+    """
+    def inside(obj):
+        if obj.get("object_type") != "char":
+            return True
+        cx, cy = (obj["x0"] + obj["x1"]) / 2, (obj["top"] + obj["bottom"]) / 2
+        return x0 <= cx <= x1 and top <= cy <= bottom
+    return page.filter(inside).extract_text() or ""
+
+
 def extract(pdf) -> list[dict]:
     links = []
     for page in pdf.pages:
@@ -15,15 +30,7 @@ def extract(pdf) -> list[dict]:
                 continue
             if isinstance(uri, bytes):
                 uri = uri.decode("utf-8", errors="replace")
-            bbox = (
-                max(link["x0"], page.bbox[0]),
-                max(link["top"], page.bbox[1]),
-                min(link["x1"], page.bbox[2]),
-                min(link["bottom"], page.bbox[3]),
-            )
-            anchor = ""
-            if bbox[0] < bbox[2] and bbox[1] < bbox[3]:
-                anchor = page.crop(bbox).extract_text() or ""
+            anchor = _anchor_text(page, link["x0"], link["top"], link["x1"], link["bottom"])
             links.append({
                 "uri": uri.strip(),
                 "anchor_text": " ".join(anchor.split()),

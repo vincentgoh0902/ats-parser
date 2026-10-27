@@ -145,6 +145,32 @@ def unknown_heading(c):
     w.education()
 
 
+def latex_header(c):
+    """Big centred name directly above the contact line, with link rectangles
+    padded upward the way hyperref draws them, so they overlap the name."""
+    c.setFont("Times-Bold", 22)
+    c.drawCentredString(W / 2, H - 60, "Goh Kai Swee Vincent")
+    y = H - 74
+    parts = [("(+65) 8000 0000", None), ("alex.tan@example.com", f"mailto:{EMAIL}"),
+             ("linkedin.com/in/goh-kai-swee-vincent", "https://www.linkedin.com/in/goh-kai-swee-vincent/"),
+             ("github.com/vincentgoh0902", "https://github.com/vincentgoh0902")]
+    text = " | ".join(p for p, _ in parts)
+    c.setFont("Times-Roman", 9)
+    x = W / 2 - c.stringWidth(text, "Times-Roman", 9) / 2
+    for i, (label, url) in enumerate(parts):
+        if i:
+            c.drawString(x, y, " | ")
+            x += c.stringWidth(" | ", "Times-Roman", 9)
+        c.drawString(x, y, label)
+        w = c.stringWidth(label, "Times-Roman", 9)
+        if url:
+            c.linkURL(url, (x, y - 3, x + w, y + 16), relative=0)  # reaches into the name
+        x += w
+    w = Writer(c, 54, W - 54, y=H - 100)
+    w.heading("EXPERIENCE")
+    w.jobs()
+
+
 def image_only(c):
     img = Image.new("RGB", (1275, 1650), "white")
     d = ImageDraw.Draw(img)
@@ -172,7 +198,8 @@ def main():
     OUT.mkdir(exist_ok=True)
     for name, draw in [("single_column", single_column), ("two_column", two_column),
                        ("hidden_links", hidden_links), ("header_contact", header_contact),
-                       ("unknown_heading", unknown_heading), ("image_only", image_only)]:
+                       ("unknown_heading", unknown_heading), ("image_only", image_only),
+                       ("latex_header", latex_header)]:
         c = canvas.Canvas(str(OUT / f"{name}.pdf"), pagesize=LETTER)
         c.setTitle(name)
         draw(c)

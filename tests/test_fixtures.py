@@ -61,6 +61,16 @@ def test_hidden_and_mismatched_links():
     assert by_url["https://alextan.dev"]["anchor_text"] == "Portfolio"
 
 
+def test_padded_link_rectangles_dont_pick_up_the_name_above():
+    r = build("latex_header")
+    by_url = {l["url"]: l for l in r["links"]}
+    li = by_url["https://www.linkedin.com/in/goh-kai-swee-vincent/"]
+    assert li["anchor_text"] == "linkedin.com/in/goh-kai-swee-vincent"
+    assert li["issue"] is None
+    assert by_url["https://github.com/vincentgoh0902"]["anchor_text"] == "github.com/vincentgoh0902"
+    assert "LINK_MISMATCH" not in codes(r)
+
+
 def test_contact_in_repeated_header():
     r = build("header_contact")
     assert {i["field"] for i in r["issues"] if i["code"] == "CONTACT_IN_HEADER"} == {"email", "phone"}
